@@ -104,7 +104,7 @@ We have several barriers in our way:
 
 - At this point, we are executing `InjectStubEntry1()` inside of a raw Mach thread. We cannot call most APIs, as any call into `pthread_*` will explode. We only have access to our `InjectData` structure and basic assembly instructions.
 - `InjectData` contains various unsigned function pointers. Re-sign them using `ptrauth_sign_unauthenticated()`. This compiles into a simple `PACIA` instruction and is safe to use.
-- Call `pthread_create_from_mach_thread()` with a `start_routine) of `InjectStubEntry2()`.
+- Call `pthread_create_from_mach_thread()` with a `start_routine` of `InjectStubEntry2()`.
 - Write a sentinel value to `d->finished1`. This informs the Injector that `InjectStubEntry1()` has finished.
 
 #### Stage 3 (inside DemoApp, real pthread)
