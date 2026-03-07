@@ -2,9 +2,6 @@
 
 This is an example project to demonstrate macOS code injection using `thread_create_running()`.
 
-> [!NOTE]
-> I used this form of code injection from 2020 until 2025. I have since migrated to [Saagar Jha's Endpoint Security](https://gist.github.com/saagarjha/a70d44951cb72f82efee3317d80ac07f) method, as it allows for dyld interposing. See my [ESInjectorDemo](https://github.com/iccir/ESInjectorDemo) repository for more information.
-
 This method of code injection originated decades ago with Wolf Rentzsch's [mach_inject](https://github.com/rentzsch/mach_inject). More recently, it's been used by [yabai](https://github.com/asmvik/yabai) to inject into the macOS Dock. I believe that [Jeremy Legendre](https://github.com/jslegendre) is the first to use `thread_convert_thread_state()` on a dummy thread to obtain PAC-signed pointers, but I'm not sure. 
 
 
@@ -15,6 +12,9 @@ This demo only targets the arm64 architecture, as I no longer own Intel hardware
 #### Software Compatibility
 
 This demo was developed on macOS Sonoma. While it should work on macOS Sequoia, I haven't personally tested it. I cannot guarantee compatibility with newer versions of macOS as Apple continues to lock down and enfeeble the platform.
+
+> [!NOTE]
+> I used this form of code injection from 2020 until 2025. I have since migrated to [Saagar Jha's Endpoint Security](https://gist.github.com/saagarjha/a70d44951cb72f82efee3317d80ac07f) method, as it allows for dyld interposing. See my [ESInjectorDemo](https://github.com/iccir/ESInjectorDemo) repository for more information.
 
 ## Preparation and Disclaimer
 
