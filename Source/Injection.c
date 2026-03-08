@@ -1,12 +1,11 @@
 #include "Injection.h"
 #include "Stub.h"
 
-#include <mach/mach.h>
 #include <dlfcn.h>
-#include <stdio.h>
-#include <pthread/pthread_spis.h>
-#include <stdlib.h>
+#include <mach/mach.h>
 #include <ptrauth.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #pragma mark - CoreSymbolication Privates

@@ -1,12 +1,12 @@
-#include <mach-o/dyld.h>
-#include <sys/ptrace.h>
-#include <assert.h>
-#include <string.h>
-#include <os/log.h>
-
 #include <libproc.h>
-#include <sys/sysctl.h>
+#include <mach-o/dyld.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/proc_info.h>
+#include <sys/ptrace.h>
+#include <sys/sysctl.h>
 
 #include "Injection.h"
 
