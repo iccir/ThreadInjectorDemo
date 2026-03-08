@@ -3,6 +3,7 @@
 
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
+#include <pthread/pthread.h>
 
 const uint64_t InjectFinishedSentinel = 0x21496E6A65637421;
 
