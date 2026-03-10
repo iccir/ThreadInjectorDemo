@@ -77,6 +77,16 @@ cleanup:
 }
 
 
+bool sFileExists(const char *path)
+{
+    struct stat st;
+    if (stat(path, &st) != 0) return false;
+    if (!S_ISREG(st.st_mode)) return false;
+    
+    return true;
+}
+
+
 bool sGetPid(const char *nameOrPid, pid_t *outPid)
 {
     char *end;
@@ -117,6 +127,11 @@ int main(int argc, char **argv, char **envp)
     pid_t pid;
     if (!sGetPid(pidOrName, &pid)) {
         sLogStderr("Could find process for '%s'", pidOrName);
+        return 1;
+    }
+    
+    if (!sFileExists(payloadPath)) {
+        sLogStderr("Payload does not exist: '%s'", payloadPath);
         return 1;
     }
     
