@@ -86,32 +86,32 @@ We have several barriers in our way:
 
 - Next, we use `dlopen()` to load the stub dylib into Injector's address space. The kernel validates the code signature for the loaded dylib.
 
-- We determine the local memory addresses of `InjectStubEntry1()` and `InjectStubEntry2()`. We also find the local address of the loaded stub and the size of its vm region.
+- We determine the local memory addresses of `ThreadInjectionStubEntry1()` and `ThreadInjectionStubEntry2()`. We also find the local address of the loaded stub and the size of its vm region.
 
 - We use the CoreSymbolication private framework to find the remote memory addresses (within DemoApp) of `pthread_create_from_mach_thread()`, `dlopen()`, and `pause()`.
 
 - We use `mach_vm_remap()` to map the stub dylib into DemoApp. This preserves the kernel's previous validation of the code signature information.
 
-- We use math to determine the remote addresses of `InjectStubEntry1()` and `InjectStubEntry2()`.
+- We use math to determine the remote addresses of `ThreadInjectionStubEntry1()` and `ThreadInjectionStubEntry2()`.
 
-- We store all function addresses to `struct InjectData`, then copy this structure into the remote process.
+- We store all function addresses to `struct ThreadInjectionData`, then copy this structure into the remote process.
 
-- We perform a bit of a dance to create a remote Mach thread in DemoApp. This involves calls to `thread_create()`, `thread_convert_thread_state()`, and `thread_create_running()`. The program counter (PC) of the new thread is set to `InjectStubEntry1()`.
+- We perform a bit of a dance to create a remote Mach thread in DemoApp. This involves calls to `thread_create()`, `thread_convert_thread_state()`, and `thread_create_running()`. The program counter (PC) of the new thread is set to `ThreadInjectionStubEntry1()`.
 
-- Finally, we wait for both `InjectStubEntry1()` and `InjectStubEntry2()` to finish.
+- Finally, we wait for both `ThreadInjectionStubEntry1()` and `ThreadInjectionStubEntry2()` to finish.
 
 #### Stage 2 (inside DemoApp, raw Mach thread)
 
-- At this point, we are executing `InjectStubEntry1()` inside of a raw Mach thread. We cannot call most APIs, as any call into `pthread_*` will explode. We only have access to our `InjectData` structure and basic assembly instructions.
-- `InjectData` contains various unsigned function pointers. Re-sign them using `ptrauth_sign_unauthenticated()`. This compiles into a simple `PACIA` instruction and is safe to use.
-- Call `pthread_create_from_mach_thread()` with a `start_routine` of `InjectStubEntry2()`.
-- Write a sentinel value to `d->finished1`. This informs the Injector that `InjectStubEntry1()` has finished.
+- At this point, we are executing `ThreadInjectionStubEntry1()` inside of a raw Mach thread. We cannot call most APIs, as any call into `pthread_*` will explode. We only have access to our `ThreadInjectionData` structure and basic assembly instructions.
+- `ThreadInjectionData` contains various unsigned function pointers. Re-sign them using `ptrauth_sign_unauthenticated()`. This compiles into a simple `PACIA` instruction and is safe to use.
+- Call `pthread_create_from_mach_thread()` with a `start_routine` of `ThreadInjectionStubEntry2()`.
+- Write a sentinel value to `d->finished1`. This informs the Injector that `ThreadInjectionStubEntry1()` has finished.
 
 #### Stage 3 (inside DemoApp, real pthread)
 
-- At this point, we are executing `InjectStubEntry2()` inside of a "real" pthread. All standard APIs are available to us.
+- At this point, we are executing `ThreadInjectionStubEntry2()` inside of a "real" pthread. All standard APIs are available to us.
 - Call `dlopen()` with our payload path.
-- Write a sentinel value to `d->finished2`. This informs the Injector that `InjectStubEntry2()` has finished.
+- Write a sentinel value to `d->finished2`. This informs the Injector that `ThreadInjectionStubEntry2()` has finished.
 
 
 ## License
