@@ -22,9 +22,11 @@ typedef struct  {
 
 typedef CSTypeRef CSSymbolRef;
 typedef CSTypeRef CSSymbolicatorRef;
+typedef CSTypeRef CSSymbolOwnerRef;
 
 extern CSSymbolicatorRef CSSymbolicatorCreateWithPid(pid_t pid);
-extern CSSymbolRef CSSymbolicatorGetSymbolWithNameAtTime(CSSymbolicatorRef cs, const char* name, uint64_t time);
+extern CSSymbolOwnerRef CSSymbolicatorGetSymbolOwnerWithNameAtTime(CSSymbolicatorRef cs, const char *name, uint64_t time);
+extern CSSymbolRef CSSymbolOwnerGetSymbolWithName(CSSymbolOwnerRef owner, const char *name);
 extern CSRange CSSymbolGetRange(CSSymbolRef symbol);
 extern void CSRelease(CSTypeRef type);
 
@@ -44,9 +46,10 @@ static ThreadInjectionLogCallback sLogCallback = NULL;
 
 #pragma mark - Private Functions
 
-static void *sGetRemoteSymbol(CSSymbolicatorRef symbolicator, const char *name)
+static void *sGetRemoteSymbol(CSSymbolicatorRef symbolicator, const char *ownerName, const char *symbolName)
 {
-    CSSymbolRef symbol = CSSymbolicatorGetSymbolWithNameAtTime(symbolicator, name, 0);
+    CSSymbolRef owner  = CSSymbolicatorGetSymbolOwnerWithNameAtTime(symbolicator, ownerName, 0);
+    CSSymbolRef symbol = CSSymbolOwnerGetSymbolWithName(owner, symbolName);
     CSRange     range  = CSSymbolGetRange(symbol);
    
     return range.location;
@@ -148,9 +151,9 @@ bool ThreadInjectionInject(
     {
         CSSymbolicatorRef symbolicator = CSSymbolicatorCreateWithPid(pid);
             
-        localData->pcfmt  = sGetRemoteSymbol(symbolicator, "pthread_create_from_mach_thread");
-        localData->dlopen = sGetRemoteSymbol(symbolicator, "dlopen");
-        localData->pause  = sGetRemoteSymbol(symbolicator, "pause");
+        localData->pcfmt  = sGetRemoteSymbol(symbolicator, "libsystem_pthread.dylib", "pthread_create_from_mach_thread");
+        localData->dlopen = sGetRemoteSymbol(symbolicator, "libdyld.dylib", "dlopen");
+        localData->pause  = sGetRemoteSymbol(symbolicator, "libsystem_c.dylib", "pause");
 
         CSRelease(symbolicator);
     }
