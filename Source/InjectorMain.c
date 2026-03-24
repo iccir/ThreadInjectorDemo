@@ -8,7 +8,7 @@
 #include <sys/ptrace.h>
 #include <sys/sysctl.h>
 
-#include "Injection.h"
+#include "ThreadInjection.h"
 
 
 static void sLog(FILE * f, char *format, ...)
@@ -104,11 +104,11 @@ bool sGetPid(const char *nameOrPid, pid_t *outPid)
 
 int main(int argc, char **argv, char **envp)
 {
-    InjectionSetLogCallback(^(InjectionLogLevel level, const char *format, ...) {
+    ThreadInjectionSetLogCallback(^(ThreadInjectionLogLevel level, const char *format, ...) {
         va_list v;
         va_start(v, format);
 
-        FILE *f = (level == InjectionLogLevelError) ? stderr : stdout;
+        FILE *f = (level == ThreadInjectionLogLevelError) ? stderr : stdout;
         vfprintf(f, format, v);
         fprintf(f, "\n");
 
@@ -135,7 +135,7 @@ int main(int argc, char **argv, char **envp)
         return 1;
     }
     
-    if (!InjectionInjectIntoProcess(pid, stubPath, payloadPath)) {
+    if (!ThreadInjectionInject(pid, stubPath, payloadPath)) {
         sLogStderr("Injection failed");
         return 2;
     } else {

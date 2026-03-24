@@ -1,13 +1,13 @@
-#ifndef STUB_H
-#define STUB_H
+#ifndef THREAD_INJECTION_STUB_H
+#define THREAD_INJECTION_STUB_H
 
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
 #include <pthread/pthread.h>
 
-const uint64_t InjectFinishedSentinel = 0x21496E6A65637421;
+const uint64_t ThreadInjectionFinishedSentinel = 0x21496E6A65637421;
 
-typedef struct InjectData {
+typedef struct ThreadInjectionData {
     int (*pcfmt)(
 		pthread_t * __restrict,
 		const pthread_attr_t *  __restrict,
@@ -19,23 +19,21 @@ typedef struct InjectData {
     int (*pause)(void);
 
      // Function Pointer to InjectStubEntry1()
-    void (*entry1)(struct InjectData *);
+    void (*entry1)(struct ThreadInjectionData *);
     
-    // Filled with InjectFinishedSentinel when entry1 enters pause() loop
+    // Filled with ThreadInjectionFinishedSentinel when entry1 enters pause() loop
     uint64_t finished1;
 
     // Function Pointer to InjectStubEntry2()
-    void (*entry2)(struct InjectData *);
+    void (*entry2)(struct ThreadInjectionData *);
 
-    // Filled with InjectFinishedSentinel before entry2 returns
+    // Filled with ThreadInjectionFinishedSentinel before entry2 returns
     uint64_t finished2;
 
     int pcfmtResult;
     void *dlopenResult;
     
     char payloadPath[1024];
-} InjectData;
+} ThreadInjectionData;
 
-extern void InjectStubEntry(InjectData *d);
-
-#endif /* STUB_H */
+#endif /* THREAD_INJECTION_STUB_H */

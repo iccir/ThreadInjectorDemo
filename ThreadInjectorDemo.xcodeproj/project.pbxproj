@@ -9,9 +9,9 @@
 /* Begin PBXBuildFile section */
 		5506741F2F48E1F500D901C7 /* DemoApp.m in Sources */ = {isa = PBXBuildFile; fileRef = 5506741E2F48E1F500D901C7 /* DemoApp.m */; };
 		550674222F48E22300D901C7 /* DemoPayload.m in Sources */ = {isa = PBXBuildFile; fileRef = 550674212F48E22300D901C7 /* DemoPayload.m */; };
-		550674272F48E24500D901C7 /* Injection.c in Sources */ = {isa = PBXBuildFile; fileRef = 550674252F48E24500D901C7 /* Injection.c */; };
+		550674272F48E24500D901C7 /* ThreadInjection.c in Sources */ = {isa = PBXBuildFile; fileRef = 550674252F48E24500D901C7 /* ThreadInjection.c */; };
 		550674282F48E24500D901C7 /* InjectorMain.c in Sources */ = {isa = PBXBuildFile; fileRef = 550674262F48E24500D901C7 /* InjectorMain.c */; };
-		55C2CD422F5B484100ACA00C /* Stub.c in Sources */ = {isa = PBXBuildFile; fileRef = 55C2CD402F5B484100ACA00C /* Stub.c */; };
+		55C2CD422F5B484100ACA00C /* ThreadInjectionStub.c in Sources */ = {isa = PBXBuildFile; fileRef = 55C2CD402F5B484100ACA00C /* ThreadInjectionStub.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,12 +57,12 @@
 		550674062F423B0100D901C7 /* DemoPayload.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = DemoPayload.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		5506741E2F48E1F500D901C7 /* DemoApp.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = DemoApp.m; path = Source/DemoApp.m; sourceTree = "<group>"; };
 		550674212F48E22300D901C7 /* DemoPayload.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = DemoPayload.m; path = Source/DemoPayload.m; sourceTree = "<group>"; };
-		550674242F48E24500D901C7 /* Injection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Injection.h; path = Source/Injection.h; sourceTree = "<group>"; };
-		550674252F48E24500D901C7 /* Injection.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = Injection.c; path = Source/Injection.c; sourceTree = "<group>"; };
+		550674242F48E24500D901C7 /* ThreadInjection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ThreadInjection.h; path = Source/ThreadInjection.h; sourceTree = "<group>"; };
+		550674252F48E24500D901C7 /* ThreadInjection.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = ThreadInjection.c; path = Source/ThreadInjection.c; sourceTree = "<group>"; };
 		550674262F48E24500D901C7 /* InjectorMain.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = InjectorMain.c; path = Source/InjectorMain.c; sourceTree = "<group>"; };
 		55C2CD3D2F5B47F900ACA00C /* InjectorStub.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = InjectorStub.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
-		55C2CD3F2F5B484100ACA00C /* Stub.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Stub.h; path = Source/Stub.h; sourceTree = "<group>"; };
-		55C2CD402F5B484100ACA00C /* Stub.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = Stub.c; path = Source/Stub.c; sourceTree = "<group>"; };
+		55C2CD3F2F5B484100ACA00C /* ThreadInjectionStub.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ThreadInjectionStub.h; path = Source/ThreadInjectionStub.h; sourceTree = "<group>"; };
+		55C2CD402F5B484100ACA00C /* ThreadInjectionStub.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = ThreadInjectionStub.c; path = Source/ThreadInjectionStub.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,8 +139,8 @@
 		550674232F48E23100D901C7 /* Injector */ = {
 			isa = PBXGroup;
 			children = (
-				550674242F48E24500D901C7 /* Injection.h */,
-				550674252F48E24500D901C7 /* Injection.c */,
+				550674242F48E24500D901C7 /* ThreadInjection.h */,
+				550674252F48E24500D901C7 /* ThreadInjection.c */,
 				550674262F48E24500D901C7 /* InjectorMain.c */,
 			);
 			name = Injector;
@@ -149,8 +149,8 @@
 		55C2CD3E2F5B483500ACA00C /* Stub */ = {
 			isa = PBXGroup;
 			children = (
-				55C2CD3F2F5B484100ACA00C /* Stub.h */,
-				55C2CD402F5B484100ACA00C /* Stub.c */,
+				55C2CD3F2F5B484100ACA00C /* ThreadInjectionStub.h */,
+				55C2CD402F5B484100ACA00C /* ThreadInjectionStub.c */,
 			);
 			name = Stub;
 			sourceTree = "<group>";
@@ -309,7 +309,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				550674272F48E24500D901C7 /* Injection.c in Sources */,
+				550674272F48E24500D901C7 /* ThreadInjection.c in Sources */,
 				550674282F48E24500D901C7 /* InjectorMain.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -326,7 +326,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				55C2CD422F5B484100ACA00C /* Stub.c in Sources */,
+				55C2CD422F5B484100ACA00C /* ThreadInjectionStub.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

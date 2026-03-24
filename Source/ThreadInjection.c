@@ -1,5 +1,5 @@
-#include "Injection.h"
-#include "Stub.h"
+#include "ThreadInjection.h"
+#include "ThreadInjectionStub.h"
 
 #include <dlfcn.h>
 #include <mach/mach.h>
@@ -31,14 +31,14 @@ extern void CSRelease(CSTypeRef type);
 
 #pragma mark - Logging
 
-static InjectionLogCallback sLogCallback = NULL;
+static ThreadInjectionLogCallback sLogCallback = NULL;
 
 #define Log(...) __extension__({ \
-    if (sLogCallback) sLogCallback(InjectionLogLevelDefault, ##__VA_ARGS__); \
+    if (sLogCallback) sLogCallback(ThreadInjectionLogLevelDefault, ##__VA_ARGS__); \
 })
 
 #define LogError(...) __extension__({ \
-    if (sLogCallback) sLogCallback(InjectionLogLevelError, ##__VA_ARGS__); \
+    if (sLogCallback) sLogCallback(ThreadInjectionLogLevelError, ##__VA_ARGS__); \
 })
 
 
@@ -47,7 +47,7 @@ static InjectionLogCallback sLogCallback = NULL;
 static void *sGetRemoteSymbol(CSSymbolicatorRef symbolicator, const char *name)
 {
     CSSymbolRef symbol = CSSymbolicatorGetSymbolWithNameAtTime(symbolicator, name, 0);
-    CSRange range = CSSymbolGetRange(symbol);
+    CSRange     range  = CSSymbolGetRange(symbol);
    
     return range.location;
 }
@@ -62,13 +62,13 @@ static void *sGetRemoteStubFunction(void *remoteStub, void *localStub, void *loc
 
 #pragma mark - Public Functions
 
-void InjectionSetLogCallback(InjectionLogCallback callback)
+void ThreadInjectionSetLogCallback(ThreadInjectionLogCallback callback)
 {
     sLogCallback = callback;
 }
 
 
-bool InjectionInjectIntoProcess(
+bool ThreadInjectionInject(
     pid_t pid,
     const char *fullPathToStub,
     const char *fullPathToPayload
@@ -80,7 +80,7 @@ bool InjectionInjectIntoProcess(
     thread_act_t thread = 0;
     mach_port_t task = 0;
 
-    InjectData *localData = alloca(sizeof(InjectData));
+    ThreadInjectionData *localData = alloca(sizeof(ThreadInjectionData));
 
     mach_vm_address_t localStub = 0;
     mach_vm_size_t localStubSize = 0;
@@ -93,7 +93,7 @@ bool InjectionInjectIntoProcess(
     vm_size_t remoteStackSize = 16 * 1024;
 
     mach_vm_address_t remoteData = 0;
-    vm_size_t remoteDataSize = sizeof(InjectData);
+    vm_size_t remoteDataSize = sizeof(ThreadInjectionData);
 
     strncpy(localData->payloadPath, fullPathToPayload, sizeof(localData->payloadPath));
 
@@ -110,8 +110,8 @@ bool InjectionInjectIntoProcess(
     {
         dlopen(fullPathToStub, RTLD_NOW);
 
-        localStubEntry1 = dlsym(RTLD_DEFAULT, "InjectStubEntry1");
-        localStubEntry2 = dlsym(RTLD_DEFAULT, "InjectStubEntry2");
+        localStubEntry1 = dlsym(RTLD_DEFAULT, "ThreadInjectionStubEntry1");
+        localStubEntry2 = dlsym(RTLD_DEFAULT, "ThreadInjectionStubEntry2");
 
         if (!localStubEntry1 || !localStubEntry2) {
             LogError("Could not load stub bundle.\n");
@@ -147,7 +147,7 @@ bool InjectionInjectIntoProcess(
     // Lookup remote symbol locations using CoreSymbolication
     {
         CSSymbolicatorRef symbolicator = CSSymbolicatorCreateWithPid(pid);
-    
+            
         localData->pcfmt  = sGetRemoteSymbol(symbolicator, "pthread_create_from_mach_thread");
         localData->dlopen = sGetRemoteSymbol(symbolicator, "dlopen");
         localData->pause  = sGetRemoteSymbol(symbolicator, "pause");
@@ -199,7 +199,7 @@ bool InjectionInjectIntoProcess(
             goto cleanup;
         }
 
-        kr = vm_write(task, remoteData, (vm_offset_t)localData, sizeof(InjectData));
+        kr = vm_write(task, remoteData, (vm_offset_t)localData, sizeof(ThreadInjectionData));
         if (kr != KERN_SUCCESS) {
             LogError("Data - vm_write() failed: %d\n", kr);
             goto cleanup;
@@ -286,9 +286,9 @@ bool InjectionInjectIntoProcess(
     // the target. Wait for finished1 and finished2 to have our magic value.
     //
     while (1) {
-        vm_size_t localDataSize = sizeof(InjectData);
+        vm_size_t localDataSize = sizeof(ThreadInjectionData);
 
-        kr = vm_read_overwrite(task, remoteData, sizeof(InjectData), (vm_address_t)localData, &localDataSize);
+        kr = vm_read_overwrite(task, remoteData, sizeof(ThreadInjectionData), (vm_address_t)localData, &localDataSize);
         if (kr != KERN_SUCCESS) {
             LogError("Data - vm_read_overwrite() failed: %d\n", kr);
             goto cleanup;
@@ -297,7 +297,10 @@ bool InjectionInjectIntoProcess(
         uint64_t finished1 = localData->finished1;
         uint64_t finished2 = localData->finished2;
 
-        if (finished1 == InjectFinishedSentinel && finished2 == InjectFinishedSentinel) {
+        if (
+            finished1 == ThreadInjectionFinishedSentinel &&
+            finished2 == ThreadInjectionFinishedSentinel
+        ) {
             break;
         }
 
@@ -326,7 +329,7 @@ cleanup:
     }
     
     if (remoteData) {
-        vm_deallocate(task, remoteData, sizeof(InjectData));
+        vm_deallocate(task, remoteData, sizeof(ThreadInjectionData));
     }
     
     return ok;

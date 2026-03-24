@@ -1,4 +1,4 @@
-#include "Stub.h"
+#include "ThreadInjectionStub.h"
 #include <dlfcn.h>
 #include <ptrauth.h>
 
@@ -6,7 +6,7 @@
 // We are very limited on what we can do here, as any calls to
 // pthread APIs will explode.
 //
-void InjectStubEntry1(InjectData *d)
+void ThreadInjectionStubEntry1(ThreadInjectionData *d)
 {
     // ptrauth_sign_unauthenticated() compiles into a PACIA instruction and is ok to use.
     d->pcfmt  = ptrauth_sign_unauthenticated(d->pcfmt,  ptrauth_key_function_pointer, 0);
@@ -18,7 +18,7 @@ void InjectStubEntry1(InjectData *d)
     pthread_t entry2Thread;
 
     d->pcfmtResult = d->pcfmt(&entry2Thread, NULL, (void *)d->entry2, d);
-    d->finished1 = InjectFinishedSentinel;
+    d->finished1 = ThreadInjectionFinishedSentinel;
     
     while (1) {
         d->pause();
@@ -26,8 +26,8 @@ void InjectStubEntry1(InjectData *d)
 }
 
 
-void InjectStubEntry2(InjectData *d)
+void ThreadInjectionStubEntry2(ThreadInjectionData *d)
 {
     d->dlopenResult = d->dlopen(d->payloadPath, RTLD_NOW);
-    d->finished2 = InjectFinishedSentinel;
+    d->finished2 = ThreadInjectionFinishedSentinel;
 }
