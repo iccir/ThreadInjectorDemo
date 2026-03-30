@@ -88,7 +88,7 @@ We have several barriers in our way:
 
 - We determine the local memory addresses of `ThreadInjectionStubEntry1()` and `ThreadInjectionStubEntry2()`. We also find the local address of the loaded stub and the size of its vm region.
 
-- We use the CoreSymbolication private framework to find the remote memory addresses (within DemoApp) of `pthread_create_from_mach_thread()`, `dlopen()`, and `pause()`.
+- We read the symbol table of the DemoApp process to find the remote addresses of `pthread_create_from_mach_thread()`, `dlopen()`, and `pause()`.
 
 - We use `mach_vm_remap()` to map the stub dylib into DemoApp. This preserves the kernel's previous validation of the code signature information.
 
@@ -106,6 +106,7 @@ We have several barriers in our way:
 - `ThreadInjectionData` contains various unsigned function pointers. Re-sign them using `ptrauth_sign_unauthenticated()`. This compiles into a simple `PACIA` instruction and is safe to use.
 - Call `pthread_create_from_mach_thread()` with a `start_routine` of `ThreadInjectionStubEntry2()`.
 - Write a sentinel value to `d->finished1`. This informs the Injector that `ThreadInjectionStubEntry1()` has finished.
+- Call `pause()` from within an infinite loop. This raw Mach thread will be terminated by the Injector.
 
 #### Stage 3 (inside DemoApp, real pthread)
 

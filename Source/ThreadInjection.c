@@ -7,28 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/param.h>
 
-#pragma mark - CoreSymbolication Privates
-
-typedef struct {
-	void *unknown1;
-	void *unknown2;
-} CSTypeRef;
-
-typedef struct  {
-   void *location;
-   uint64_t length;
-} CSRange;
-
-typedef CSTypeRef CSSymbolRef;
-typedef CSTypeRef CSSymbolicatorRef;
-typedef CSTypeRef CSSymbolOwnerRef;
-
-extern CSSymbolicatorRef CSSymbolicatorCreateWithPid(pid_t pid);
-extern CSSymbolOwnerRef CSSymbolicatorGetSymbolOwnerWithNameAtTime(CSSymbolicatorRef cs, const char *name, uint64_t time);
-extern CSSymbolRef CSSymbolOwnerGetSymbolWithName(CSSymbolOwnerRef owner, const char *name);
-extern CSRange CSSymbolGetRange(CSSymbolRef symbol);
-extern void CSRelease(CSTypeRef type);
+#include <mach-o/dyld_images.h>
+#include <mach-o/loader.h>
+#include <mach-o/nlist.h>
 
 
 #pragma mark - Logging
@@ -44,22 +27,207 @@ static ThreadInjectionLogCallback sLogCallback = NULL;
 })
 
 
-#pragma mark - Private Functions
 
-static void *sGetRemoteSymbol(CSSymbolicatorRef symbolicator, const char *ownerName, const char *symbolName)
+
+#pragma mark - Remote Reading
+
+static bool sRemoteRead(task_t task, vm_address_t address, void *buffer, vm_size_t inSize)
 {
-    CSSymbolRef owner  = CSSymbolicatorGetSymbolOwnerWithNameAtTime(symbolicator, ownerName, 0);
-    CSSymbolRef symbol = CSSymbolOwnerGetSymbolWithName(owner, symbolName);
-    CSRange     range  = CSSymbolGetRange(symbol);
-   
-    return range.location;
+    vm_size_t outSize = 0;
+    kern_return_t kr = vm_read_overwrite(task, address, inSize, (vm_address_t)buffer, &outSize);
+    return (kr == KERN_SUCCESS) && (outSize == inSize);
+};
+
+
+static void *sRemoteAlloc(task_t task, vm_address_t addr, vm_size_t inSize)
+{
+    void *buffer = malloc(inSize);
+    
+    if (sRemoteRead(task, addr, buffer, inSize)) {
+        return buffer;
+    } else {
+        free(buffer);
+        return NULL;
+    }
 }
 
 
-static void *sGetRemoteStubFunction(void *remoteStub, void *localStub, void *localStubFunction)
+static bool sRemoteReadString(task_t task, vm_address_t address, char *buffer, vm_size_t inSize)
 {
-    localStubFunction = ptrauth_strip(localStubFunction, ptrauth_key_function_pointer);
-    return remoteStub + (localStubFunction - localStub);
+    bool ok = sRemoteRead(task, address, buffer, inSize);
+
+    if (!ok) {
+        // Slow path in the very rare case that address is near the end of a vm region.
+        // Read the bytes individually.
+        //
+        for (size_t i = 0; i < inSize; i++) {
+            ok = sRemoteRead(task, address + i, buffer + i, 1);
+            if (!ok || !buffer[i]) break;
+        }
+    }
+    
+    if (inSize) {
+        buffer[inSize - 1] = 0;
+    }
+
+    return ok;
+}
+
+
+static vm_address_t sRemoteWalkSymbolTable(task_t task, vm_address_t loadAddress, const char *symbolName)
+{
+    vm_address_t result = 0;
+
+    uint8_t *loadCommands = NULL;
+
+    mach_msg_type_number_t symtabBufferSize = 0;
+    struct nlist_64 *symtabBuffer = NULL;
+
+    mach_msg_type_number_t strtabBufferSize = 0;
+    const char *strtabBuffer = NULL;
+
+    struct mach_header_64 machHeader;
+    if (
+        !sRemoteRead(task, loadAddress, &machHeader, sizeof(machHeader)) ||
+        machHeader.magic != MH_MAGIC_64
+    ) {
+        goto cleanup;
+    }
+
+    loadCommands = sRemoteAlloc(task, loadAddress + sizeof(machHeader), machHeader.sizeofcmds);
+    if (!loadCommands) {
+        goto cleanup;
+    }
+    
+    struct segment_command_64 *text     = NULL;
+    struct segment_command_64 *linkedit = NULL;
+    struct symtab_command     *symtab   = NULL;
+
+    struct load_command *loadCommand     = (struct load_command *)loadCommands;
+    struct load_command *loadCommandsEnd = (struct load_command *)(loadCommands + machHeader.sizeofcmds);
+
+    for (size_t i = 0; i < machHeader.ncmds && (loadCommand < loadCommandsEnd); i++) {
+        if (
+            loadCommand->cmdsize < sizeof(struct load_command) ||
+            (uint8_t *)loadCommand + loadCommand->cmdsize > (uint8_t *)loadCommandsEnd
+        ) {
+            goto cleanup;
+        }
+
+        if (loadCommand->cmd == LC_SEGMENT_64) {
+            struct segment_command_64 *seg = (struct segment_command_64 *)loadCommand;
+
+            if (!text && strncmp(seg->segname, SEG_TEXT, sizeof(seg->segname)) == 0) {
+                text = seg;
+            } else if (!linkedit && strncmp(seg->segname, SEG_LINKEDIT, sizeof(seg->segname)) == 0) {
+                linkedit = seg;
+            }
+
+        } else if (loadCommand->cmd == LC_SYMTAB) {
+            symtab = (struct symtab_command *)loadCommand;
+        }
+
+        loadCommand = (struct load_command *)((uint8_t *)loadCommand + loadCommand->cmdsize);
+    }
+
+    if (!text || !linkedit || !symtab || symtab->nsyms == 0) {
+        goto cleanup;
+    }
+
+    int64_t slide = (int64_t)loadAddress - (int64_t)text->vmaddr;
+
+    vm_address_t linkeditAddress = (vm_address_t)((linkedit->vmaddr + slide) - linkedit->fileoff);
+
+    symtabBufferSize = symtab->nsyms * sizeof(struct nlist_64);
+    vm_read(task, linkeditAddress + symtab->symoff, symtabBufferSize, (vm_offset_t *)&symtabBuffer, &symtabBufferSize);
+
+    if (!symtabBuffer) {
+        goto cleanup;
+    }
+
+    strtabBufferSize = symtab->strsize;
+    vm_read(task, linkeditAddress + symtab->stroff, strtabBufferSize, (vm_offset_t *)&strtabBuffer, &strtabBufferSize);
+
+    if (!strtabBuffer) {
+        goto cleanup;
+    }
+
+    for (size_t i = 0; i < symtab->nsyms; i++) {
+        uint32_t strx = symtabBuffer[i].n_un.n_strx;
+        if (strx >= symtab->strsize) continue;
+
+        if (strcmp(symbolName, strtabBuffer + strx) == 0) {
+            result = (vm_address_t)(symtabBuffer[i].n_value + (uint64_t)slide);
+            break;
+        }
+    }
+
+cleanup:
+    if (loadCommands) free(loadCommands);
+    if (symtabBuffer) vm_deallocate(mach_task_self(), (vm_address_t)symtabBuffer, symtabBufferSize);
+    if (strtabBuffer) vm_deallocate(mach_task_self(), (vm_address_t)strtabBuffer, strtabBufferSize);
+
+    return result;
+}
+
+
+static void *sGetRemoteSymbol(task_t task, const char *imageName, const char *symbolName)
+{
+    void *result = NULL;
+
+    struct dyld_all_image_infos allImageInfos;
+    struct dyld_image_info *images = NULL;
+
+    if (!imageName || !symbolName) {
+        goto cleanup;
+    }
+
+    // Get remote all_image_info_addr and store into allImageInfos
+    {
+        struct task_dyld_info dyldInfo;
+        mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+        kern_return_t kr = task_info(task, TASK_DYLD_INFO, (task_info_t)&dyldInfo, &count);
+
+        if (kr != KERN_SUCCESS) {
+            LogError("sGetRemoteSymbol - task_info() failed %d", kr);
+            goto cleanup;
+        }
+
+        if (!sRemoteRead(task, (vm_address_t)dyldInfo.all_image_info_addr, &allImageInfos, sizeof(allImageInfos))) {
+            LogError("sGetRemoteSymbol - failed to read remote all_image_infos");
+            goto cleanup;
+        }
+    }
+
+    uint32_t imageCount = allImageInfos.infoArrayCount;
+    if (imageCount == 0) {
+        LogError("sGetRemoteSymbol - imageCount is 0");
+        goto cleanup;
+    }
+
+    images = sRemoteAlloc(task, (vm_address_t)allImageInfos.infoArray, imageCount *sizeof(struct dyld_image_info));
+
+    for (size_t i = 0; i < imageCount && result == 0; i++) {
+        char path[PATH_MAX];
+        if (!sRemoteReadString(task, (vm_address_t)images[i].imageFilePath, path, PATH_MAX)) {
+            continue;
+        }
+        
+        path[PATH_MAX - 1] = 0;
+        
+        if (!strstr(path, imageName)) {
+            continue;
+        }
+
+        vm_address_t loadAddress = (vm_address_t)images[i].imageLoadAddress;
+        result = (void *)sRemoteWalkSymbolTable(task, loadAddress, symbolName);
+        if (result) break;
+    }
+
+cleanup:
+    free(images);
+
+    return result;
 }
 
 
@@ -149,13 +317,21 @@ bool ThreadInjectionInject(
         
     // Lookup remote symbol locations using CoreSymbolication
     {
-        CSSymbolicatorRef symbolicator = CSSymbolicatorCreateWithPid(pid);
-            
-        localData->pcfmt  = sGetRemoteSymbol(symbolicator, "libsystem_pthread.dylib", "pthread_create_from_mach_thread");
-        localData->dlopen = sGetRemoteSymbol(symbolicator, "libdyld.dylib", "dlopen");
-        localData->pause  = sGetRemoteSymbol(symbolicator, "libsystem_c.dylib", "pause");
+       
+        {
+            uint64_t startTime = mach_absolute_time();
 
-        CSRelease(symbolicator);
+             mach_timebase_info_data_t timebase;
+                mach_timebase_info(&timebase);
+
+            localData->pcfmt  = sGetRemoteSymbol(task, "libsystem_pthread.dylib", "_pthread_create_from_mach_thread");
+            localData->dlopen = sGetRemoteSymbol(task, "libdyld.dylib", "_dlopen");
+            localData->pause  = sGetRemoteSymbol(task, "libsystem_c.dylib", "_pause");
+
+            uint64_t elapsed = (mach_absolute_time() - startTime) * timebase.numer / timebase.denom;
+            printf("raw elapsed: %ldms\n", (long)(elapsed / 1000000));
+        }
+
     }
 
     // Map remote stub using mach_vm_remap(), this should preserve code signatures
@@ -184,8 +360,11 @@ bool ThreadInjectionInject(
 
     // Now that we have remoteStub, we can fill entry1 and entry2 using some pointer math
     {
-        localData->entry1 = sGetRemoteStubFunction((void *)remoteStub, (void *)localStub, localStubEntry1);
-        localData->entry2 = sGetRemoteStubFunction((void *)remoteStub, (void *)localStub, localStubEntry2);
+        localStubEntry1 = ptrauth_strip(localStubEntry1, ptrauth_key_function_pointer);
+        localStubEntry2 = ptrauth_strip(localStubEntry2, ptrauth_key_function_pointer);
+
+        localData->entry1 = remoteStub + (localStubEntry1 - localStub);
+        localData->entry2 = remoteStub + (localStubEntry2 - localStub);
     }
 
     // Allocate and protect remote data, then copy localData -> remoteData
