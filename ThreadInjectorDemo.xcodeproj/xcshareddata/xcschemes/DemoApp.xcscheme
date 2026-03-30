@@ -15,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "550673FA2F423AEE00D901C7"
-               BuildableName = "Injector"
-               BlueprintName = "Injector"
+               BlueprintIdentifier = "550673E62F423AD400D901C7"
+               BuildableName = "DemoApp.app"
+               BlueprintName = "DemoApp"
                ReferencedContainer = "container:ThreadInjectorDemo.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -40,32 +40,17 @@
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
-      allowLocationSimulation = "YES"
-      viewDebuggingEnabled = "No">
+      allowLocationSimulation = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "550673FA2F423AEE00D901C7"
-            BuildableName = "Injector"
-            BlueprintName = "Injector"
+            BlueprintIdentifier = "550673E62F423AD400D901C7"
+            BuildableName = "DemoApp.app"
+            BlueprintName = "DemoApp"
             ReferencedContainer = "container:ThreadInjectorDemo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <CommandLineArguments>
-         <CommandLineArgument
-            argument = "$BUILT_PRODUCTS_DIR/InjectorStub.dylib"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "$BUILT_PRODUCTS_DIR/DemoPayload.dylib"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "DemoApp"
-            isEnabled = "YES">
-         </CommandLineArgument>
-      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -77,9 +62,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "550673FA2F423AEE00D901C7"
-            BuildableName = "Injector"
-            BlueprintName = "Injector"
+            BlueprintIdentifier = "550673E62F423AD400D901C7"
+            BuildableName = "DemoApp.app"
+            BlueprintName = "DemoApp"
             ReferencedContainer = "container:ThreadInjectorDemo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
