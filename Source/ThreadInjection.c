@@ -315,23 +315,11 @@ bool ThreadInjectionInject(
         localStubSize = round_page(localStubSize);
     }
         
-    // Lookup remote symbol locations using CoreSymbolication
+    // Lookup remote symbol locations
     {
-       
-        {
-            uint64_t startTime = mach_absolute_time();
-
-             mach_timebase_info_data_t timebase;
-                mach_timebase_info(&timebase);
-
-            localData->pcfmt  = sGetRemoteSymbol(task, "libsystem_pthread.dylib", "_pthread_create_from_mach_thread");
-            localData->dlopen = sGetRemoteSymbol(task, "libdyld.dylib", "_dlopen");
-            localData->pause  = sGetRemoteSymbol(task, "libsystem_c.dylib", "_pause");
-
-            uint64_t elapsed = (mach_absolute_time() - startTime) * timebase.numer / timebase.denom;
-            printf("raw elapsed: %ldms\n", (long)(elapsed / 1000000));
-        }
-
+        localData->pcfmt  = sGetRemoteSymbol(task, "libsystem_pthread.dylib", "_pthread_create_from_mach_thread");
+        localData->dlopen = sGetRemoteSymbol(task, "libdyld.dylib", "_dlopen");
+        localData->pause  = sGetRemoteSymbol(task, "libsystem_c.dylib", "_pause");
     }
 
     // Map remote stub using mach_vm_remap(), this should preserve code signatures
