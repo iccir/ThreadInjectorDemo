@@ -7,6 +7,7 @@
 #include <sys/proc_info.h>
 #include <sys/ptrace.h>
 #include <sys/sysctl.h>
+#include <unistd.h>
 
 #include "ThreadInjection.h"
 
@@ -87,17 +88,17 @@ bool sFileExists(const char *path)
 }
 
 
-bool sGetPid(const char *nameOrPid, pid_t *outPid)
+bool sGetPidByNumber(const char *numberString, pid_t *outPid)
 {
     char *end;
-    pid_t result = (pid_t)strtol(nameOrPid, &end, 10);
+    pid_t result = (pid_t)strtol(numberString, &end, 10);
 
-    if ((*end == 0) && (nameOrPid != end)) {
+    if ((*end == 0) && (numberString != end)) {
         *outPid = result;
         return true;
 
     } else {
-        return sFindPidByName(nameOrPid, outPid);
+        return false;
     }
 }
 
@@ -124,23 +125,59 @@ int main(int argc, char **argv, char **envp)
     char *payloadPath = argv[2];
 	char *pidOrName   = argv[3];
 
-    pid_t pid;
-    if (!sGetPid(pidOrName, &pid)) {
-        sLogStderr("Could find process for '%s'", pidOrName);
-        return 1;
-    }
-    
     if (!sFileExists(payloadPath)) {
         sLogStderr("Payload does not exist: '%s'", payloadPath);
         return 1;
     }
-    
-    if (!ThreadInjectionInject(pid, stubPath, payloadPath)) {
-        sLogStderr("Injection failed");
-        return 2;
-    } else {
-        sLogStdout("Successfully injected into pid %ld", (long)pid);
+
+    // If a number was provided, assume that this is a one-time injection
+    {
+        pid_t pid;
+
+        if (sGetPidByNumber(pidOrName, &pid)) {
+            if (!ThreadInjectionInject(pid, stubPath, payloadPath)) {
+                sLogStderr("Injection failed");
+                return 2;
+            } else {
+                sLogStdout("Successfully injected into pid %ld", (long)pid);
+                return 0;
+            }
+        }
     }
-    
-    return 0;
+
+    // Listen for processes with a name
+    {
+        sLogStdout("Listening for processes named '%s'", pidOrName);
+
+        const size_t injectedPidsSize = 128;
+        pid_t        injectedPids[injectedPidsSize] = {0};
+        size_t       injectedPidsIndex = 0;
+
+        while (1) {
+            pid_t pid;
+            
+            if (sFindPidByName(pidOrName, &pid)) {
+                bool shouldInject = true;
+
+                for (size_t i = 0; i < injectedPidsSize; i++) {
+                    if (injectedPids[i] == pid) {
+                        shouldInject = false;
+                    }
+                }
+
+                if (shouldInject) {
+                    if (!ThreadInjectionInject(pid, stubPath, payloadPath)) {
+                        sLogStderr("Failed to inject into pid %ld", (long)pid);
+                    } else {
+                        sLogStdout("Successfully injected into pid %ld", (long)pid);
+                    }
+                    
+                    injectedPids[injectedPidsIndex] = pid;
+                    injectedPidsIndex = (injectedPidsIndex + 1) % injectedPidsSize;
+                }
+            }
+
+            sleep(1);
+        }
+    }
 }
