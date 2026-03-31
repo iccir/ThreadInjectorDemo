@@ -116,14 +116,13 @@ int main(int argc, char **argv, char **envp)
         va_end(v);
     });
 
-    if (argc != 4) {
-        sLogStderr("Usage: Injector path_to_stub path_to_payload pid_or_name");
+    if (argc != 3) {
+        sLogStderr("Usage: Injector path_to_payload pid_or_name");
         return 1;
     }
 
-	char *stubPath    = argv[1];
-    char *payloadPath = argv[2];
-	char *pidOrName   = argv[3];
+    char *payloadPath = argv[1];
+	char *pidOrName   = argv[2];
 
     if (!sFileExists(payloadPath)) {
         sLogStderr("Payload does not exist: '%s'", payloadPath);
@@ -135,7 +134,7 @@ int main(int argc, char **argv, char **envp)
         pid_t pid;
 
         if (sGetPidByNumber(pidOrName, &pid)) {
-            if (!ThreadInjectionInject(pid, stubPath, payloadPath)) {
+            if (!ThreadInjectionInject(pid, payloadPath)) {
                 sLogStderr("Injection failed");
                 return 2;
             } else {
@@ -166,7 +165,7 @@ int main(int argc, char **argv, char **envp)
                 }
 
                 if (shouldInject) {
-                    if (!ThreadInjectionInject(pid, stubPath, payloadPath)) {
+                    if (!ThreadInjectionInject(pid, payloadPath)) {
                         sLogStderr("Failed to inject into pid %ld", (long)pid);
                     } else {
                         sLogStdout("Successfully injected into pid %ld", (long)pid);

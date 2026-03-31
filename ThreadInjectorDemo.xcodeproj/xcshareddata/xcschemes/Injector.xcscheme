@@ -54,10 +54,6 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "$BUILT_PRODUCTS_DIR/InjectorStub.dylib"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
             argument = "$BUILT_PRODUCTS_DIR/DemoPayload.dylib"
             isEnabled = "YES">
          </CommandLineArgument>

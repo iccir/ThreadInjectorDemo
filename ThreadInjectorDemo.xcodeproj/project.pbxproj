@@ -11,7 +11,6 @@
 		550674222F48E22300D901C7 /* DemoPayload.m in Sources */ = {isa = PBXBuildFile; fileRef = 550674212F48E22300D901C7 /* DemoPayload.m */; };
 		550674272F48E24500D901C7 /* ThreadInjection.c in Sources */ = {isa = PBXBuildFile; fileRef = 550674252F48E24500D901C7 /* ThreadInjection.c */; };
 		550674282F48E24500D901C7 /* InjectorMain.c in Sources */ = {isa = PBXBuildFile; fileRef = 550674262F48E24500D901C7 /* InjectorMain.c */; };
-		55C2CD422F5B484100ACA00C /* ThreadInjectionStub.c in Sources */ = {isa = PBXBuildFile; fileRef = 55C2CD402F5B484100ACA00C /* ThreadInjectionStub.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,13 +27,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 550674052F423B0100D901C7;
 			remoteInfo = payload;
-		};
-		55C2CD432F5B49DC00ACA00C /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 550673D12F423AB300D901C7 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 55C2CD352F5B47F900ACA00C;
-			remoteInfo = InjectorStub;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -60,9 +52,6 @@
 		550674242F48E24500D901C7 /* ThreadInjection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ThreadInjection.h; path = Source/ThreadInjection.h; sourceTree = "<group>"; };
 		550674252F48E24500D901C7 /* ThreadInjection.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = ThreadInjection.c; path = Source/ThreadInjection.c; sourceTree = "<group>"; };
 		550674262F48E24500D901C7 /* InjectorMain.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = InjectorMain.c; path = Source/InjectorMain.c; sourceTree = "<group>"; };
-		55C2CD3D2F5B47F900ACA00C /* InjectorStub.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = InjectorStub.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
-		55C2CD3F2F5B484100ACA00C /* ThreadInjectionStub.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ThreadInjectionStub.h; path = Source/ThreadInjectionStub.h; sourceTree = "<group>"; };
-		55C2CD402F5B484100ACA00C /* ThreadInjectionStub.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = ThreadInjectionStub.c; path = Source/ThreadInjectionStub.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,13 +76,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		55C2CD392F5B47F900ACA00C /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -102,7 +84,6 @@
 			children = (
 				5506741D2F48E1E500D901C7 /* App */,
 				550674202F48E20C00D901C7 /* Payload */,
-				55C2CD3E2F5B483500ACA00C /* Stub */,
 				550674232F48E23100D901C7 /* Injector */,
 				550673DA2F423AB300D901C7 /* Products */,
 			);
@@ -114,7 +95,6 @@
 				550673E72F423AD400D901C7 /* DemoApp.app */,
 				550673FB2F423AEE00D901C7 /* Injector */,
 				550674062F423B0100D901C7 /* DemoPayload.dylib */,
-				55C2CD3D2F5B47F900ACA00C /* InjectorStub.dylib */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -146,26 +126,10 @@
 			name = Injector;
 			sourceTree = "<group>";
 		};
-		55C2CD3E2F5B483500ACA00C /* Stub */ = {
-			isa = PBXGroup;
-			children = (
-				55C2CD3F2F5B484100ACA00C /* ThreadInjectionStub.h */,
-				55C2CD402F5B484100ACA00C /* ThreadInjectionStub.c */,
-			);
-			name = Stub;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
 		550674022F423B0100D901C7 /* Headers */ = {
-			isa = PBXHeadersBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		55C2CD362F5B47F900ACA00C /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -203,7 +167,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				55C2CD442F5B49DC00ACA00C /* PBXTargetDependency */,
 				5506741C2F48D2C600D901C7 /* PBXTargetDependency */,
 				5506741A2F48D2C400D901C7 /* PBXTargetDependency */,
 			);
@@ -227,23 +190,6 @@
 			name = DemoPayload;
 			productName = payload;
 			productReference = 550674062F423B0100D901C7 /* DemoPayload.dylib */;
-			productType = "com.apple.product-type.library.dynamic";
-		};
-		55C2CD352F5B47F900ACA00C /* InjectorStub */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 55C2CD3A2F5B47F900ACA00C /* Build configuration list for PBXNativeTarget "InjectorStub" */;
-			buildPhases = (
-				55C2CD362F5B47F900ACA00C /* Headers */,
-				55C2CD372F5B47F900ACA00C /* Sources */,
-				55C2CD392F5B47F900ACA00C /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = InjectorStub;
-			productName = payload;
-			productReference = 55C2CD3D2F5B47F900ACA00C /* InjectorStub.dylib */;
 			productType = "com.apple.product-type.library.dynamic";
 		};
 /* End PBXNativeTarget section */
@@ -280,7 +226,6 @@
 			targets = (
 				550673E62F423AD400D901C7 /* DemoApp */,
 				550674052F423B0100D901C7 /* DemoPayload */,
-				55C2CD352F5B47F900ACA00C /* InjectorStub */,
 				550673FA2F423AEE00D901C7 /* Injector */,
 			);
 		};
@@ -322,14 +267,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		55C2CD372F5B47F900ACA00C /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				55C2CD422F5B484100ACA00C /* ThreadInjectionStub.c in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -342,11 +279,6 @@
 			isa = PBXTargetDependency;
 			target = 550674052F423B0100D901C7 /* DemoPayload */;
 			targetProxy = 5506741B2F48D2C600D901C7 /* PBXContainerItemProxy */;
-		};
-		55C2CD442F5B49DC00ACA00C /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 55C2CD352F5B47F900ACA00C /* InjectorStub */;
-			targetProxy = 55C2CD432F5B49DC00ACA00C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -522,11 +454,6 @@
 				ARCHS = arm64e;
 				CODE_SIGN_STYLE = Automatic;
 				ONLY_ACTIVE_ARCH = NO;
-				OTHER_LDFLAGS = (
-					"-F/System/Library/PrivateFrameworks",
-					"-framework",
-					CoreSymbolication,
-				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -536,11 +463,6 @@
 			buildSettings = {
 				ARCHS = arm64e;
 				CODE_SIGN_STYLE = Automatic;
-				OTHER_LDFLAGS = (
-					"-F/System/Library/PrivateFrameworks",
-					"-framework",
-					CoreSymbolication,
-				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -559,32 +481,6 @@
 			name = Debug;
 		};
 		5506740E2F423B0100D901C7 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ARCHS = arm64e;
-				CODE_SIGN_STYLE = Automatic;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				EXECUTABLE_PREFIX = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-			};
-			name = Release;
-		};
-		55C2CD3B2F5B47F900ACA00C /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ARCHS = arm64e;
-				CODE_SIGN_STYLE = Automatic;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				EXECUTABLE_PREFIX = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-			};
-			name = Debug;
-		};
-		55C2CD3C2F5B47F900ACA00C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = arm64e;
@@ -632,15 +528,6 @@
 			buildConfigurations = (
 				5506740D2F423B0100D901C7 /* Debug */,
 				5506740E2F423B0100D901C7 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		55C2CD3A2F5B47F900ACA00C /* Build configuration list for PBXNativeTarget "InjectorStub" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				55C2CD3B2F5B47F900ACA00C /* Debug */,
-				55C2CD3C2F5B47F900ACA00C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

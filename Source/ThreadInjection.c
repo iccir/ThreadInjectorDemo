@@ -1,5 +1,4 @@
 #include "ThreadInjection.h"
-#include "ThreadInjectionStub.h"
 
 #include <dlfcn.h>
 #include <mach/mach.h>
@@ -10,8 +9,10 @@
 #include <sys/param.h>
 
 #include <mach-o/dyld_images.h>
+#include <mach-o/ldsyms.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
+#include <mach-o/getsect.h>
 
 
 #pragma mark - Logging
@@ -27,6 +28,103 @@ static ThreadInjectionLogCallback sLogCallback = NULL;
 })
 
 
+#pragma mark - Entry Functions
+
+typedef struct ThreadInjectionData {
+    int (*pcfmt)(
+		pthread_t * __restrict,
+		const pthread_attr_t *  __restrict,
+		void * (*)(void * ),
+		void * __restrict
+    ); // pthread_create_from_mach_thread
+    
+    void *(*dlopen)(const char *, int);
+    int (*pause)(void);
+
+     // Function Pointer to ThreadInjectionEntry1()
+    void (*entry1)(struct ThreadInjectionData *);
+    
+    // Filled with ThreadInjectionFinishedSentinel before entry1 enters pause() loop
+    uint64_t finished1;
+
+    // Function Pointer to ThreadInjectionEntry2()
+    void (*entry2)(struct ThreadInjectionData *);
+
+    // Filled with ThreadInjectionFinishedSentinel before entry2 returns
+    uint64_t finished2;
+
+    int pcfmtResult;
+    void *dlopenResult;
+    
+    char payloadPath[PATH_MAX];
+} ThreadInjectionData;
+
+
+#define ThreadInjectionFinishedSentinel 0x21496E6A65637421
+#define ThreadInjectionSectionName "__threadinject"
+
+// Note:
+//
+// ThreadInjectionEntry1 and ThreadInjectionEntry2 will be copied into the remote process
+// via vm_remap(). We need to round 'src_address' and 'size' towards page boundaries,
+// otherwise vm_remap() will fail.
+//
+// As a result, we may copy additional portions of the __TEXT segment into the target process.
+// While unlikely to be an issue, this theoretically could expose sensitive information.
+//
+// As a nicety, we use the aligned(0x4000) attribute in an attempt to get the following layout:
+//
+// * ThreadInjectionEntry1 (on a page boundary)
+// * ThreadInjectionEntry2
+// * Padding with 'nop' instruction
+// * ThreadInjectionEntryEnd (on a page boundary)
+//
+// Assuming that the linker doesn't reorder ThreadInjectionEntry1/2/End,
+// we can then vm_remap() with a 'src_address' of &ThreadInjectionEntry1 and
+// a 'size' of (ThreadInjectionEntryEnd - ThreadInjectionEntry1).
+//
+// If re-ordering occurs, we use getsectiondata() as a fallback.
+
+
+// This function is called on a thread created by thread_create...()
+// We are very limited on what we can do here, as any calls to
+// pthread APIs will explode.
+//
+// We place this function in the "__TEXT,__threadinject" section so that it can
+// be easily vm_remap'd to the remote process.
+//
+__attribute__((section(SEG_TEXT "," ThreadInjectionSectionName), aligned(0x4000)))
+void ThreadInjectionEntry1(ThreadInjectionData *d)
+{
+    // ptrauth_sign_unauthenticated() compiles into a PACIA instruction and is ok to use.
+    d->pcfmt  = ptrauth_sign_unauthenticated(d->pcfmt,  ptrauth_key_function_pointer, 0);
+    d->dlopen = ptrauth_sign_unauthenticated(d->dlopen, ptrauth_key_function_pointer, 0);
+    d->pause  = ptrauth_sign_unauthenticated(d->pause,  ptrauth_key_function_pointer, 0);
+    d->entry1 = ptrauth_sign_unauthenticated(d->entry1, ptrauth_key_function_pointer, 0);
+    d->entry2 = ptrauth_sign_unauthenticated(d->entry2, ptrauth_key_function_pointer, 0);
+
+    pthread_t entry2Thread;
+
+    d->pcfmtResult = d->pcfmt(&entry2Thread, NULL, (void *)d->entry2, d);
+    d->finished1 = ThreadInjectionFinishedSentinel;
+    
+    while (1) {
+        d->pause();
+    }
+}
+
+
+__attribute__((section(SEG_TEXT "," ThreadInjectionSectionName)))
+void ThreadInjectionEntry2(ThreadInjectionData *d)
+{
+    d->dlopenResult = d->dlopen(d->payloadPath, RTLD_NOW);
+    d->finished2 = ThreadInjectionFinishedSentinel;
+}
+
+
+// See above note - this function exists solely to influence padding
+__attribute__((section(SEG_TEXT "," ThreadInjectionSectionName), aligned(0x4000), used))
+void ThreadInjectionEntryEnd(void) { }
 
 
 #pragma mark - Remote Reading
@@ -241,7 +339,6 @@ void ThreadInjectionSetLogCallback(ThreadInjectionLogCallback callback)
 
 bool ThreadInjectionInject(
     pid_t pid,
-    const char *fullPathToStub,
     const char *fullPathToPayload
 ) {
     bool ok = false;
@@ -253,12 +350,14 @@ bool ThreadInjectionInject(
 
     ThreadInjectionData *localData = alloca(sizeof(ThreadInjectionData));
 
-    mach_vm_address_t localStub = 0;
-    mach_vm_size_t localStubSize = 0;
-    void *localStubEntry1 = NULL;
-    void *localStubEntry2 = NULL;
+    vm_address_t  localSection = 0;
+    unsigned long localSectionSize = 0;
 
-    mach_vm_address_t remoteStub = 0;
+    uintptr_t localEntry1   = (uintptr_t)ptrauth_strip(&ThreadInjectionEntry1,   ptrauth_key_function_pointer);
+    uintptr_t localEntry2   = (uintptr_t)ptrauth_strip(&ThreadInjectionEntry2,   ptrauth_key_function_pointer);
+    uintptr_t localEntryEnd = (uintptr_t)ptrauth_strip(&ThreadInjectionEntryEnd, ptrauth_key_function_pointer);
+
+    mach_vm_address_t remoteSection = 0;
 
     mach_vm_address_t remoteStack = 0;
     vm_size_t remoteStackSize = 16 * 1024;
@@ -277,44 +376,6 @@ bool ThreadInjectionInject(
         }
     }
 
-    // Load stub dylib into current process, find our two entry functions
-    {
-        dlopen(fullPathToStub, RTLD_NOW);
-
-        localStubEntry1 = dlsym(RTLD_DEFAULT, "ThreadInjectionStubEntry1");
-        localStubEntry2 = dlsym(RTLD_DEFAULT, "ThreadInjectionStubEntry2");
-
-        if (!localStubEntry1 || !localStubEntry2) {
-            LogError("Could not load stub bundle.\n");
-            goto cleanup;
-        }
-    }
-
-    // Use dladdr() to find the starting address of our loaded dylib
-    {
-        Dl_info dlInfo;
-        dladdr(localStubEntry1, &dlInfo);
-
-        localStub = (mach_vm_address_t)dlInfo.dli_fbase;
-    }
-
-    // Use mach_vm_region() to fill localStubSize
-    {
-        mach_port_t objectName;
-
-        struct vm_region_basic_info_64 info;
-        mach_msg_type_number_t infoCount = VM_REGION_BASIC_INFO_COUNT_64;
-
-        kr = mach_vm_region(mach_task_self(), &localStub, &localStubSize, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &infoCount, &objectName);
-        if (kr != KERN_SUCCESS) {
-            LogError("mach_vm_region() returned %d\n", kr);
-            goto cleanup;
-        }
-        
-        // Round up to page boundary
-        localStubSize = round_page(localStubSize);
-    }
-        
     // Lookup remote symbol locations
     {
         localData->pcfmt  = sGetRemoteSymbol(task, "libsystem_pthread.dylib", "_pthread_create_from_mach_thread");
@@ -322,37 +383,60 @@ bool ThreadInjectionInject(
         localData->pause  = sGetRemoteSymbol(task, "libsystem_c.dylib", "_pause");
     }
 
-    // Map remote stub using mach_vm_remap(), this should preserve code signatures
+    // Map entry functions into remote process using mach_vm_remap(), this should preserve code signatures
     {
         vm_prot_t currentProtection;
         vm_prot_t maxProtection;
 
+        // Assuming the our functions have been correctly aligned and not reordered,
+        // we can directly use localEntry1 and (localEntryEnd - localEntry1)
+        if (
+            (localEntry1 < localEntry2)    && (localEntry2 < localEntryEnd) &&
+            (localEntry1 % PAGE_SIZE == 0) && (localEntryEnd % PAGE_SIZE == 0)
+        ) {
+            localSection     = localEntry1;
+            localSectionSize = localEntryEnd - localEntry1;
+
+        // Fallback: use getsectiondata() and expand to page boundaries.
+        } else {
+            unsigned long unroundedSize;
+            vm_address_t unroundedStart = (vm_address_t) getsectiondata(
+                &_mh_execute_header,
+                SEG_TEXT, ThreadInjectionSectionName,
+                &unroundedSize
+            );
+
+            // Calculate start/end/size by rounding to page boundaries (needed for mach_vm_remap)
+            vm_address_t roundedStart = trunc_page(unroundedStart);
+            vm_address_t roundedEnd   = round_page(unroundedStart + unroundedSize);
+
+            localSection     = roundedStart;
+            localSectionSize = roundedEnd - roundedStart;
+        }
+
         kr = mach_vm_remap(
             task,
-            &remoteStub, localStubSize,
-            0, VM_FLAGS_ANYWHERE|VM_FLAGS_RETURN_DATA_ADDR,
-            mach_task_self(), localStub, false,
+            &remoteSection, localSectionSize,
+            0, VM_FLAGS_ANYWHERE | VM_FLAGS_RETURN_DATA_ADDR,
+            mach_task_self(), (mach_vm_address_t)localSection, false,
             &currentProtection, &maxProtection, VM_INHERIT_NONE
         );
         if (kr != KERN_SUCCESS) {
-            LogError("Stub - mach_vm_remap() failed: %d\n", kr);
+            LogError("Entry Functions - mach_vm_remap() failed: %d\n", kr);
             goto cleanup;
         }
 
-        kr = vm_protect(task, remoteStub, localStubSize, 1, VM_PROT_READ | VM_PROT_EXECUTE);
+        kr = vm_protect(task, remoteSection, localSectionSize, 1, VM_PROT_READ | VM_PROT_EXECUTE);
         if (kr != KERN_SUCCESS) {
-            LogError("Stub - vm_protect() failed: %d\n", kr);
+            LogError("Entry Functions - vm_protect() failed: %d\n", kr);
             goto cleanup;
         }
     }
 
-    // Now that we have remoteStub, we can fill entry1 and entry2 using some pointer math
+    // Now that we have remoteSection, we can fill entry1 and entry2 using some pointer math
     {
-        localStubEntry1 = ptrauth_strip(localStubEntry1, ptrauth_key_function_pointer);
-        localStubEntry2 = ptrauth_strip(localStubEntry2, ptrauth_key_function_pointer);
-
-        localData->entry1 = remoteStub + (localStubEntry1 - localStub);
-        localData->entry2 = remoteStub + (localStubEntry2 - localStub);
+        localData->entry1 = (void *)(remoteSection + (localEntry1 - localSection));
+        localData->entry2 = (void *)(remoteSection + (localEntry2 - localSection));
     }
 
     // Allocate and protect remote data, then copy localData -> remoteData
@@ -452,7 +536,7 @@ bool ThreadInjectionInject(
         goto cleanup;
     }
     
-    // InjectStubEntry1() and InjectStubEntry2() should now be executing in
+    // ThreadInjectionEntry1() and ThreadInjectionEntry2() should now be executing in
     // the target. Wait for finished1 and finished2 to have our magic value.
     //
     while (1) {

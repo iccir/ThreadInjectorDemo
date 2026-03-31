@@ -23,7 +23,6 @@ void ThreadInjectionSetLogCallback(ThreadInjectionLogCallback callback);
 // Perform actual injection
 bool ThreadInjectionInject(
     pid_t pid,
-    const char *fullPathToStub,
     const char *fullPathToPayload
 );
 
