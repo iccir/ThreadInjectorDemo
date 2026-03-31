@@ -66,8 +66,8 @@ typedef struct ThreadInjectionData {
 // Note:
 //
 // ThreadInjectionEntry1 and ThreadInjectionEntry2 will be copied into the remote process
-// via vm_remap(). We need to round 'src_address' and 'size' towards page boundaries,
-// otherwise vm_remap() will fail.
+// via mach_vm_remap(). We need to round 'src_address' and 'size' towards page boundaries,
+// otherwise mach_vm_remap() will fail.
 //
 // As a result, we may copy additional portions of the __TEXT segment into the target process.
 // While unlikely to be an issue, this theoretically could expose sensitive information.
@@ -80,7 +80,7 @@ typedef struct ThreadInjectionData {
 // * ThreadInjectionEntryEnd (on a page boundary)
 //
 // Assuming that the linker doesn't reorder ThreadInjectionEntry1/2/End,
-// we can then vm_remap() with a 'src_address' of &ThreadInjectionEntry1 and
+// we can then mach_vm_remap() with a 'src_address' of &ThreadInjectionEntry1 and
 // a 'size' of (ThreadInjectionEntryEnd - ThreadInjectionEntry1).
 //
 // If re-ordering occurs, we use getsectiondata() as a fallback.
@@ -91,7 +91,7 @@ typedef struct ThreadInjectionData {
 // pthread APIs will explode.
 //
 // We place this function in the "__TEXT,__threadinject" section so that it can
-// be easily vm_remap'd to the remote process.
+// be easily mach_vm_remap'd to the remote process.
 //
 __attribute__((section(SEG_TEXT "," ThreadInjectionSectionName), aligned(0x4000)))
 void ThreadInjectionEntry1(ThreadInjectionData *d)
@@ -376,13 +376,6 @@ bool ThreadInjectionInject(
         }
     }
 
-    // Lookup remote symbol locations
-    {
-        localData->pcfmt  = sGetRemoteSymbol(task, "libsystem_pthread.dylib", "_pthread_create_from_mach_thread");
-        localData->dlopen = sGetRemoteSymbol(task, "libdyld.dylib", "_dlopen");
-        localData->pause  = sGetRemoteSymbol(task, "libsystem_c.dylib", "_pause");
-    }
-
     // Map entry functions into remote process using mach_vm_remap(), this should preserve code signatures
     {
         vm_prot_t currentProtection;
@@ -437,6 +430,13 @@ bool ThreadInjectionInject(
     {
         localData->entry1 = (void *)(remoteSection + (localEntry1 - localSection));
         localData->entry2 = (void *)(remoteSection + (localEntry2 - localSection));
+    }
+
+    // Lookup remote symbol locations
+    {
+        localData->pcfmt  = sGetRemoteSymbol(task, "libsystem_pthread.dylib", "_pthread_create_from_mach_thread");
+        localData->dlopen = sGetRemoteSymbol(task, "libdyld.dylib", "_dlopen");
+        localData->pause  = sGetRemoteSymbol(task, "libsystem_c.dylib", "_pause");
     }
 
     // Allocate and protect remote data, then copy localData -> remoteData
