@@ -236,17 +236,20 @@ static vm_address_t sRemoteWalkSymbolTable(task_t task, vm_address_t loadAddress
 
     vm_address_t linkeditAddress = (vm_address_t)((linkedit->vmaddr + slide) - linkedit->fileoff);
 
-    symtabBufferSize = symtab->nsyms * sizeof(struct nlist_64);
-    vm_read(task, linkeditAddress + symtab->symoff, symtabBufferSize, (vm_offset_t *)&symtabBuffer, &symtabBufferSize);
+    mach_msg_type_number_t bytesRead = 0;
+    kern_return_t kr;
 
-    if (!symtabBuffer) {
+    symtabBufferSize = symtab->nsyms * sizeof(struct nlist_64);
+    kr = vm_read(task, linkeditAddress + symtab->symoff, symtabBufferSize, (vm_offset_t *)&symtabBuffer, &bytesRead);
+
+    if (!symtabBuffer || (kr != KERN_SUCCESS) || (bytesRead != symtabBufferSize)) {
         goto cleanup;
     }
 
     strtabBufferSize = symtab->strsize;
-    vm_read(task, linkeditAddress + symtab->stroff, strtabBufferSize, (vm_offset_t *)&strtabBuffer, &strtabBufferSize);
+    kr = vm_read(task, linkeditAddress + symtab->stroff, strtabBufferSize, (vm_offset_t *)&strtabBuffer, &bytesRead);
 
-    if (!strtabBuffer) {
+    if (!strtabBuffer || (kr != KERN_SUCCESS) || (bytesRead != strtabBufferSize)) {
         goto cleanup;
     }
 
@@ -269,6 +272,26 @@ cleanup:
 }
 
 
+static bool sGetAllImageInfos(task_t task, struct dyld_all_image_infos *outAllImageInfos)
+{
+    struct task_dyld_info dyldInfo;
+    mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+    kern_return_t kr = task_info(task, TASK_DYLD_INFO, (task_info_t)&dyldInfo, &count);
+
+    if (kr != KERN_SUCCESS) {
+        LogError("sGetRemoteSymbol - task_info() failed %d", kr);
+        return false;
+    }
+
+    if (!sRemoteRead(task, (vm_address_t)dyldInfo.all_image_info_addr, outAllImageInfos, sizeof(*outAllImageInfos))) {
+        LogError("sGetRemoteSymbol - failed to read remote all_image_infos");
+        return false;
+    }
+    
+    return true;
+}
+
+
 static void *sGetRemoteSymbol(task_t task, const char *imageName, const char *symbolName)
 {
     void *result = NULL;
@@ -280,21 +303,8 @@ static void *sGetRemoteSymbol(task_t task, const char *imageName, const char *sy
         goto cleanup;
     }
 
-    // Get remote all_image_info_addr and store into allImageInfos
-    {
-        struct task_dyld_info dyldInfo;
-        mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
-        kern_return_t kr = task_info(task, TASK_DYLD_INFO, (task_info_t)&dyldInfo, &count);
-
-        if (kr != KERN_SUCCESS) {
-            LogError("sGetRemoteSymbol - task_info() failed %d", kr);
-            goto cleanup;
-        }
-
-        if (!sRemoteRead(task, (vm_address_t)dyldInfo.all_image_info_addr, &allImageInfos, sizeof(allImageInfos))) {
-            LogError("sGetRemoteSymbol - failed to read remote all_image_infos");
-            goto cleanup;
-        }
+    if (!sGetAllImageInfos(task, &allImageInfos)) {
+        goto cleanup;
     }
 
     uint32_t imageCount = allImageInfos.infoArrayCount;
@@ -304,6 +314,10 @@ static void *sGetRemoteSymbol(task_t task, const char *imageName, const char *sy
     }
 
     images = sRemoteAlloc(task, (vm_address_t)allImageInfos.infoArray, imageCount *sizeof(struct dyld_image_info));
+    if (!images) {
+        LogError("sGetRemoteSymbol - images is NULL");
+        goto cleanup;
+    }
 
     for (size_t i = 0; i < imageCount && result == 0; i++) {
         char path[PATH_MAX];
@@ -345,8 +359,13 @@ bool ThreadInjectionInject(
 
     kern_return_t kr;
 
-    thread_act_t thread = 0;
+    thread_act_t dummyThread = 0;
+    thread_act_t remoteThread = 0;
     mach_port_t task = 0;
+    
+    // When true, we cannot safely deallocate remoteThread / remoteStack / remoteData
+    bool entry1IsCritical = false;
+    bool entry2IsCritical = false;
 
     ThreadInjectionData *localData = alloca(sizeof(ThreadInjectionData));
 
@@ -365,13 +384,37 @@ bool ThreadInjectionInject(
     mach_vm_address_t remoteData = 0;
     vm_size_t remoteDataSize = sizeof(ThreadInjectionData);
 
-    strncpy(localData->payloadPath, fullPathToPayload, sizeof(localData->payloadPath));
+    strlcpy(localData->payloadPath, fullPathToPayload, sizeof(localData->payloadPath));
 
     // Start with task_for_pid() before loading anything
     {
         kr = task_for_pid(mach_task_self(), pid, &task);
         if (kr != KERN_SUCCESS) {
             LogError("task_for_pid(%d) failed: %d\n", pid, kr);
+            goto cleanup;
+        }
+    }
+
+    // Wait until remote process has libSystemInitialized=true
+    {
+        bool isLibSystemInitialized = false;
+
+        for (size_t loopGuard = 0; loopGuard < 100; loopGuard++) {
+            struct dyld_all_image_infos allImageInfos;
+            
+            if (!sGetAllImageInfos(task, &allImageInfos)) {
+                LogError("sGetAllImageInfos() failed");
+                goto cleanup;
+            }
+
+            isLibSystemInitialized = allImageInfos.libSystemInitialized;
+            if (isLibSystemInitialized) break;
+
+            usleep(1000); // Delay 1ms
+        }
+        
+        if (!isLibSystemInitialized) {
+            LogError("Timed out while waiting for libSystemInitialized=true in pid %ld", pid);
             goto cleanup;
         }
     }
@@ -498,7 +541,7 @@ bool ThreadInjectionInject(
     __darwin_arm_thread_state64_set_sp(localThreadState, stackPointer);
     
     // Create a dummy thread to use with thread_convert_thread_state()
-    kr = thread_create(task, &thread);
+    kr = thread_create(task, &dummyThread);
     if (kr != KERN_SUCCESS) {
         LogError("thread_create() failed: %d\n", kr);
         goto cleanup;
@@ -509,7 +552,7 @@ bool ThreadInjectionInject(
     // thread_convert_thread_state() handles this for us.
     //
     kr = thread_convert_thread_state(
-        thread, THREAD_CONVERT_THREAD_STATE_FROM_SELF, threadFlavor,
+        dummyThread, THREAD_CONVERT_THREAD_STATE_FROM_SELF, threadFlavor,
         (thread_state_t) &localThreadState,   localThreadFlavorCount,
         (thread_state_t) &remoteThreadState, &remoteThreadFlavorCount
     );
@@ -519,7 +562,8 @@ bool ThreadInjectionInject(
     }
     
     // Terminate the dummy thread
-    kr = thread_terminate(thread);
+    kr = thread_terminate(dummyThread);
+    dummyThread = 0;
     if (kr != KERN_SUCCESS) {
         LogError("thread_terminate() failed: %d\n", kr);
         goto cleanup;
@@ -529,17 +573,23 @@ bool ThreadInjectionInject(
     kr = thread_create_running(
         task, threadFlavor,
         (thread_state_t)&remoteThreadState, remoteThreadFlavorCount,
-        &thread
+        &remoteThread
     );
     if (kr != KERN_SUCCESS) {
         LogError("thread_create_running() failed: %d\n", kr);
         goto cleanup;
     }
+
+    // At this point, it is now unsafe to cleanup various remote* variables
+    {
+        entry1IsCritical = true;
+        entry2IsCritical = true;
+    }
     
     // ThreadInjectionEntry1() and ThreadInjectionEntry2() should now be executing in
-    // the target. Wait for finished1 and finished2 to have our magic value.
+    // the target. Wait for finished1 and finished2 to have our sentinel value.
     //
-    while (1) {
+    for (size_t loopGuard = 0; loopGuard < 250; loopGuard++) {
         vm_size_t localDataSize = sizeof(ThreadInjectionData);
 
         kr = vm_read_overwrite(task, remoteData, sizeof(ThreadInjectionData), (vm_address_t)localData, &localDataSize);
@@ -551,39 +601,59 @@ bool ThreadInjectionInject(
         uint64_t finished1 = localData->finished1;
         uint64_t finished2 = localData->finished2;
 
+        if (finished1) entry1IsCritical = false;
+        if (finished2) entry2IsCritical = false;
+
         if (
             finished1 == ThreadInjectionFinishedSentinel &&
             finished2 == ThreadInjectionFinishedSentinel
         ) {
+            ok = true;
             break;
         }
 
-        /*
-            Right now, we loop forever as long as vm_read_overwrite() doesn't fail.
-            In practice, there should probably be a timeout check here:
-            
-            if (timedOut) {
-                LogError("Timed out while waiting for sentinels");
-                goto cleanup;
-            }
-        */
-
-        usleep(10000);
+        usleep(1000); // Delay 1ms
+    }
+   
+cleanup:
+    if (dummyThread) {
+        thread_terminate(dummyThread);
     }
 
-    ok = true;
-    
-cleanup:
-    if (thread) {
-        thread_terminate(thread);
+    if (remoteThread && !entry1IsCritical) {
+        if (thread_terminate(remoteThread) == KERN_SUCCESS) {
+            remoteThread = 0;
+        } else {
+            LogError("thread_terminate() of remoteThread failed");
+        }
     }
 
     if (remoteStack) {
-        vm_deallocate(task, remoteStack, remoteStackSize);
+        if (!remoteThread) {
+            if (vm_deallocate(task, remoteStack, remoteStackSize) != KERN_SUCCESS) {
+                LogError("vm_dealloc() of remoteStack failed");
+                ok = false;
+            }
+
+        } else {
+            LogError("Cannot cleanup remoteStack due to remoteThread still running");
+        }
     }
     
     if (remoteData) {
-        vm_deallocate(task, remoteData, sizeof(ThreadInjectionData));
+        if (!entry1IsCritical && !entry2IsCritical) {
+            if (vm_deallocate(task, remoteData, sizeof(ThreadInjectionData)) != KERN_SUCCESS) {
+                LogError("vm_dealloc() of remoteData failed");
+                ok = false;
+            }
+
+        } else {
+            LogError("Cannot cleanup remoteData due to critical sections: %ld %ld", entry1IsCritical, entry2IsCritical);
+        }
+    }
+    
+    if (task) {
+        mach_port_deallocate(mach_task_self(), task);
     }
     
     return ok;
